@@ -262,14 +262,45 @@ def upload_to_firestore(rows: list[dict], sa_path: str) -> int:
     batch = db.batch()
     ops = 0
     uploaded = 0
+    fixed = 0
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    # Map fingerprints to existing docs so we can repair old LinkedIn-walled
+    # apply links in place (from before the channel-extraction fix).
+    fp_to_doc = {}
+    for doc in jobs_col.stream():
+        doc_fp = doc.to_dict().get("fp")
+        if doc_fp:
+            fp_to_doc[doc_fp] = doc
 
     for row in rows:
         fp = row["fp"]
+        doc_id = f"scrape_{fp}"
         if fp in existing:
+            doc = fp_to_doc.get(fp)
+            if doc is not None:
+                d = doc.to_dict() or {}
+                old_url = (d.get("applicationUrl") or "")
+                is_walled = "linkedin.com" in old_url and not d.get("needsLinkedin", False)
+                if is_walled:
+                    # Re-derive the channel from the stored description.
+                    site = d.get("site", "linkedin")
+                    ch, needs_li = extract_apply_channel(
+                        d.get("title", ""), d.get("description", ""), old_url, site
+                    )
+                    batch.update(doc.reference, {
+                        "applicationUrl": ch,
+                        "posterContact": ch,
+                        "needsLinkedin": needs_li,
+                    })
+                    ops += 1
+                    fixed += 1
+                    if ops >= 450:
+                        batch.commit()
+                        batch = db.batch()
+                        ops = 0
             continue
         existing.add(fp)
-        doc_id = f"scrape_{fp}"
         doc_ref = jobs_col.document(doc_id)
         batch.set(doc_ref, row["doc"])
         ops += 1
@@ -281,6 +312,8 @@ def upload_to_firestore(rows: list[dict], sa_path: str) -> int:
 
     if ops:
         batch.commit()
+    if fixed:
+        print(f"Repaired {fixed} existing jobs with LinkedIn-walled apply links.")
     return uploaded
 
 
