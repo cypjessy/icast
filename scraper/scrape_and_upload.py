@@ -95,6 +95,37 @@ CATEGORY_RULES = [
     (r"\b(receptionist|office assistant|data entry|clerk|secretar|front desk|admin)", "Retail"),
 ]
 
+APPLY_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+\w")
+APPLY_URL_RE = re.compile(r"https?://(?!www\.linkedin\.com)[^\s\)\]\"']{10,}", re.IGNORECASE)
+
+
+def extract_apply_channel(title: str, description: str, url: str, site: str):
+    """Find a usable apply channel. LinkedIn 'job_url's force users through
+    the LinkedIn login wall, so they are a last resort only. Preference:
+    1. apply email found in the description (mailto)
+    2. external apply URL found in the description (company careers page,
+       Indeed, Greenhouse, Lever, Workable...)
+    3. Indeed posting URL (browsable without login)
+    4. LinkedIn URL (login-walled — kept but flagged so the app can apply
+       in-app instead)
+    Returns (channel, needs_linkedin) where channel is '' when none found.
+    """
+    desc = description or ""
+    m = APPLY_EMAIL_RE.search(desc)
+    if m:
+        email = m.group(0).rstrip('.').lower()
+        if not any(x in email for x in ("example.com", "noemails", "no-reply", "noreply")):
+            return email, False
+    m = APPLY_URL_RE.search(desc)
+    if m:
+        return m.group(0).rstrip('.,;'), False
+    if site == "indeed":
+        return url, False
+    # LinkedIn without any external channel: no good link — signal the app
+    # to accept in-app applications instead.
+    return "", True
+
+
 # Posters that are clearly companies/organizations (used for isCompany).
 COMPANY_HINT = re.compile(
     r"(ltd|limited|company|group|agency|hospital|school|hotel|safaricom|"
@@ -300,6 +331,8 @@ def main() -> int:
         salary = extract_salary(description)
         category = classify(title, description)
         is_company = detect_company(company) or company.lower() != "not stated"
+        site = str(r.get("site") or "")
+        apply_channel, needs_linkedin = extract_apply_channel(title, description, url, site)
 
         posted = r.get("date_posted")
         posted_ms = (
@@ -313,8 +346,14 @@ def main() -> int:
             "doc": {
                 "title": title[:120],
                 "postedBy": company[:60],
-                "posterContact": url,          # app opens apply via URL for provider jobs
-                "applicationUrl": url,
+                # Apply channel: email/careers-URL when one was found; a
+                # LinkedIn login-walled URL only as a last resort. When no
+                # channel exists at all, leave blank so the app takes
+                # in-app applications instead.
+                "posterContact": apply_channel,
+                "applicationUrl": apply_channel,
+                "needsLinkedin": needs_linkedin,
+                "site": site,
                 "location": location[:60],
                 "pay": salary,
                 "type": job_type_to_type(r.get("job_type") or ""),

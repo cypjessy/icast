@@ -26,6 +26,7 @@ data class Job(
     val isCompany: Boolean = false,      // AI-classified: true = company/organization poster
     val featuredUntil: Long = 0L,        // paid boost expiry (ms); > now = Featured
     val premium: Boolean = false,        // paid application required to apply
+    val needsLinkedin: Boolean = false,  // scraped job whose only apply route is LinkedIn's login wall
     val postedAtMillis: Long = System.currentTimeMillis() - postedAgoSeedMillis(postedAgo)
 ) {
     val isProviderJob: Boolean get() = source == SOURCE_PROVIDER

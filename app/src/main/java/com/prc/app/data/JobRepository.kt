@@ -179,7 +179,13 @@ object JobRepository {
     fun parseRemoteJob(doc: com.google.firebase.firestore.DocumentSnapshot): Job? = doc.toJob()
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toJob(): Job? {
-        val id = (get("localId") as? Long ?: get("localId") as? Int)?.toInt() ?: return null
+        // Local jobs carry a localId; scraper docs (scrape_{fp}) derive a
+        // stable id from their fingerprint so they survive re-reads.
+        val id = (get("localId") as? Long ?: get("localId") as? Int)?.toInt()
+            ?: this.id.takeIf { it.startsWith("scrape_") }?.let {
+                Math.floorMod(it.hashCode(), 1_000_000_000)
+            }
+            ?: return null
         val title = getString("title") ?: return null
         @Suppress("UNCHECKED_CAST")
         fun strList(key: String): List<String> = (get(key) as? List<String>) ?: emptyList()
@@ -207,6 +213,7 @@ object JobRepository {
             isCompany = getBoolean("isCompany") ?: false,
             featuredUntil = getLong("featuredUntil") ?: 0L,
             premium = getBoolean("premium") ?: false,
+            needsLinkedin = getBoolean("needsLinkedin") ?: false,
             postedAtMillis = getLong("postedAtMillis") ?: System.currentTimeMillis()
         )
     }

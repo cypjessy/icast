@@ -556,6 +556,9 @@ private fun SkillTag(text: String) {
 private fun openApplyChannel(job: Job, context: android.content.Context): Boolean? {
     // Internal (user-posted) jobs apply in-app only — never leave the app.
     if (!job.isProviderJob) return null
+    // Scraped LinkedIn posts whose only link is the LinkedIn login wall:
+    // apply in-app instead of bouncing users to a login page.
+    if (job.needsLinkedin) return null
     val url = job.applicationUrl.trim()
     return try {
         when {
@@ -588,7 +591,7 @@ private fun openApplyChannel(job: Job, context: android.content.Context): Boolea
 
 /** Button caption reflecting how the user will apply. */
 private fun applyButtonLabel(job: Job): String {
-    if (!job.isProviderJob) return "Apply now"   // internal job — in-app apply
+    if (!job.isProviderJob || job.needsLinkedin) return "Apply now"   // in-app apply
     val url = job.applicationUrl.trim()
     return when {
         url.contains("@") && !url.startsWith("http") -> "Apply via email"
