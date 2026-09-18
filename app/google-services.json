@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "776332736908",
+    "project_id": "studio-9017402032-62b83",
+    "storage_bucket": "studio-9017402032-62b83.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:776332736908:android:89f7fa910963a9013d7ea9",
+        "android_client_info": {
+          "package_name": "com.prc.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "776332736908-s0n3hhbp93b8be85eh0tjb7m7tisbf7e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjzCEY8Tt5Hf3Quqw3WbJ7kN3W3vIiq3E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "776332736908-s0n3hhbp93b8be85eh0tjb7m7tisbf7e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

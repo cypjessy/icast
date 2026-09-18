@@ -1,0 +1,23 @@
+# Never commit credentials or service accounts
+service-account.json
+*.pem
+key.json
+secrets/
+gradle.properties
+local.properties
+
+# Build artifacts
+build/
+app/build/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Scraper runtime artifacts
+scraper/*.csv
+scraper/service-account.json
+__pycache__/
+*.pyc

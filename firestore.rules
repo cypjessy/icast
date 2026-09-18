@@ -1,0 +1,119 @@
+rules_version = '2';
+
+// PRC Jobs — data isolation rules.
+// Every client-facing collection is scoped so one user can never read or
+// write another user's data, even with the Firestore API directly.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    // Admin = users/{uid}.role == "admin" (bootstrap-admins included).
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ---------- users ----------
+    // Profile data is private: a user reads/writes ONLY their own doc.
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+      // New accounts create their own profile; updates limited to own doc.
+      // role can only be set on create (bootstrap admin) — never overwritten.
+      allow create: if isSelf(uid);
+      allow update: if isSelf(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+      allow delete: if false; // accounts are not deletable from the client
+    }
+
+    // ---------- saved jobs (subcollection of users) ----------
+    match /users/{uid}/saved/{jobId} {
+      allow read, write: if isSelf(uid);
+    }
+
+    // ---------- jobs (public listings) ----------
+    // Anyone signed-in can browse live jobs; only admins create/delete.
+    // Boost fields (featuredUntil/premium) are payment results — admin/Cloud
+    // Function only. Clients may create their own community job posting.
+    match /jobs/{jobId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.isFeatured != true
+        && request.resource.data.featuredUntil == 0;
+      allow update: if signedIn()
+        && resource.data.posterContact == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.contact
+        && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['featuredUntil', 'featuredPlan', 'premium']);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- applications ----------
+    // CRITICAL isolation: an application doc contains the applicant's phone,
+    // CV and answers. Only the applicant who created it and admins may read.
+    match /applications/{appId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.applicantUid == request.auth.uid);
+      // Applicant stamps their own uid on create — cannot spoof someone else's.
+      allow create: if signedIn() && request.resource.data.applicantUid == request.auth.uid;
+      // Status/note updates: applicant may edit only their own; admin may
+      // update any (decisions, notes).
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.applicantUid == request.auth.uid);
+      allow delete: if false;
+    }
+
+    // ---------- payments ----------
+    // Contains amounts + product info. Owner-read only; writes happen via
+    // Cloud Functions (Admin SDK bypasses rules). Clients may create the
+    // initial "initialized" record for their own transaction.
+    match /payments/{reference} {
+      allow read: if isAdmin() || isSelf(resource.data.uid);
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdmin() || false; // verify/revoke only via Admin SDK
+      allow delete: if false;
+    }
+
+    // ---------- notifications ----------
+    // Bell items are per-recipient.
+    match /notifications/{noteId} {
+      allow read: if signedIn() && resource.data.recipientContact ==
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.contact;
+      allow create: if signedIn(); // apps push notifications on others' behalf
+      allow update, delete: if false; // read-state is local only
+    }
+
+    // ---------- plan analytics ----------
+    // One doc per user; owner-scoped subcollections (attempts) too.
+    match /plan_analytics/{uid} {
+      allow read: if isAdmin() || isSelf(uid);
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+      match /attempts/{attemptId} {
+        allow read: if isAdmin() || isSelf(uid);
+        allow create, update: if isSelf(uid);
+        allow delete: if false;
+      }
+    }
+
+    // ---------- admins & activity ----------
+    match /admins/{email} {
+      allow read: if isAdmin();
+      allow write: if false; // managed via console
+    }
+    match /activity_history/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---------- default deny ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

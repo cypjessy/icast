@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Customize what gets backed up to cloud on devices running Android 12+ (API 31+). -->
+    </cloud-backup>
+</data-extraction-rules>
